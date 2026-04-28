@@ -38,9 +38,11 @@
           <div class="row"><label for="induction">Induction</label><select id="induction"><option value="na" selected>Natural Aspirated</option><option value="supercharger">Supercharger</option><option value="turbo">Turbo</option><option value="twincharge">Turbo + Supercharger</option></select></div>
           <div class="row"><label>Throttle: <span id="throttleLabel">0%</span></label><input id="throttle" type="range" min="0" max="100" value="0" /></div>
           <div class="row"><label>Load / dyno brake: <span id="loadLabel">20%</span></label><input id="load" type="range" min="0" max="100" value="20" /></div>
+          <div class="row"><label>Brake: <span id="brakeLabel">0%</span></label><input id="brake" type="range" min="0" max="100" value="0" /></div>
           <div class="row"><label>RPM hold target: <span id="holdLabel">3000</span></label><input id="holdTarget" type="range" min="1000" max="9000" value="3000" /></div>
           <div class="row"><label>Cylinders/Rotors: <span id="unitLabel">4</span></label><input id="units" type="range" min="2" max="12" step="1" value="4" /></div>
           <div class="row"><label for="gearSelect">Gear</label><select id="gearSelect"><option value="0">N</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></div>
+          <div class="row"><label>One-button accel speed: <span id="accelRateLabel">4.0x</span></label><input id="accelRate" type="range" min="1" max="12" step="0.5" value="4" /></div>
           <label class="checkline"><input id="oneButton" type="checkbox" /> One-button accelerate (hold Space)</label>
 
           <div class="stats">
@@ -70,17 +72,21 @@
       const ctx = canvas.getContext('2d');
       const throttleEl = document.getElementById('throttle');
       const loadEl = document.getElementById('load');
+      const brakeEl = document.getElementById('brake');
       const holdTargetEl = document.getElementById('holdTarget');
       const unitsEl = document.getElementById('units');
       const engineTypeEl = document.getElementById('engineType');
       const inductionEl = document.getElementById('induction');
       const gearSelectEl = document.getElementById('gearSelect');
+      const accelRateEl = document.getElementById('accelRate');
       const oneButtonEl = document.getElementById('oneButton');
 
       const throttleLabel = document.getElementById('throttleLabel');
       const loadLabel = document.getElementById('loadLabel');
+      const brakeLabel = document.getElementById('brakeLabel');
       const holdLabel = document.getElementById('holdLabel');
       const unitLabel = document.getElementById('unitLabel');
+      const accelRateLabel = document.getElementById('accelRateLabel');
       const rpmStat = document.getElementById('rpmStat');
       const boostStat = document.getElementById('boostStat');
       const hpStat = document.getElementById('hpStat');
@@ -102,6 +108,7 @@
       let gHeld = false, spaceAccel = false, timeWarp = 1;
       let rpm = 700, angle = 0, boostPsi = 0, hp = 0, tq = 0, speedMps = 0;
       let turboSpool = 0, shiftCutTimer = 0, prevGear = 0;
+      let oneButtonThrottle = 5;
 
       let audioCtx = null;
       let master, combustionOsc, pulseOsc, harmonicOsc, whineOsc, turboOsc, chirpOsc;
@@ -147,7 +154,7 @@
         combustionOsc.start(); pulseOsc.start(); harmonicOsc.start(); whineOsc.start(); turboOsc.start(); chirpOsc.start(); whiteSrc.start();
       }
 
-      function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; throttleEl.value=0; loadEl.value=20; holdTargetEl.value=3000; unitsEl.value=4; gearSelectEl.value=0; prevGear=0; }
+      function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; oneButtonThrottle=5; throttleEl.value=0; loadEl.value=20; brakeEl.value=0; holdTargetEl.value=3000; unitsEl.value=4; gearSelectEl.value=0; prevGear=0; }
 
       function baseTorque(r,thr,units,type){
         const peak = type==='rotary' ? 95 + units*20 : 110 + units*17;
@@ -163,7 +170,19 @@
         const type=engineTypeEl.value, induction=inductionEl.value, units=Number(unitsEl.value);
         const revLimit = type==='rotary' ? 9500 : 8000;
         const manualThr = Number(throttleEl.value)/100;
-        const thr = oneButtonEl.checked && spaceAccel ? 1 : manualThr;
+        const brake01 = Number(brakeEl.value)/100;
+        const accelRate = Number(accelRateEl.value);
+        let thr;
+        if (oneButtonEl.checked) {
+          const targetThrottle = spaceAccel ? 100 : 5;
+          oneButtonThrottle += (targetThrottle - oneButtonThrottle) * clamp(dt * accelRate, 0, 1);
+          oneButtonThrottle = clamp(oneButtonThrottle, 5, 100);
+          throttleEl.value = oneButtonThrottle.toFixed(1);
+          thr = oneButtonThrottle / 100;
+        } else {
+          thr = manualThr;
+          oneButtonThrottle = Number(throttleEl.value);
+        }
         const load01 = Number(loadEl.value)/100;
         const gear = Number(gearSelectEl.value), ratio = gearRatios[gear];
 
@@ -196,7 +215,7 @@
         if (gear > 0) {
           const aeroDrag = 0.35 * speedMps * speedMps;
           const rolling = 28;
-          const wheelLoad = aeroDrag + rolling;
+          const wheelLoad = aeroDrag + rolling + brake01 * 900;
           roadLoadTorque = wheelLoad / Math.max(0.5, ratio * finalDrive);
         }
 
@@ -218,7 +237,7 @@
         if (gear > 0) {
           const wheelTorque = tq * ratio * finalDrive * 0.82;
           const accel = wheelTorque / 1600; // coarse mass scaling
-          speedMps = Math.max(0, speedMps + (accel - speedMps*0.015) * dt);
+          speedMps = Math.max(0, speedMps + (accel - speedMps*0.015 - brake01*9) * dt);
 
           // enforce kinematic linkage so shifts sound correct
           const wheelRps = speedMps / tireCirc;
@@ -255,7 +274,7 @@
         turboOsc.frequency.setTargetAtTime(850 + boostPsi*130 + rps*1.2, now, .05);
         turboFilter.frequency.setTargetAtTime(900 + boostPsi*90, now, .08);
 
-        const rough = Number(loadEl.value)/100;
+        const rough = Number(loadEl.value)/100 + Number(brakeEl.value)/220;
         const scOn = induction==='supercharger'||induction==='twincharge';
         const tOn = induction==='turbo'||induction==='twincharge';
 
@@ -265,7 +284,7 @@
 
         const torqueCut = shiftCutTimer > 0 ? (shiftCutTimer / 0.12) : 0;
         gPulse.gain.setTargetAtTime(type==='rotary' ? 0.06 : 0.11, now, .05);
-        master.gain.setTargetAtTime(0.03 + Number(throttleEl.value)/700 - torqueCut*0.018, now, .04);
+        master.gain.setTargetAtTime(0.03 + Number(throttleEl.value)/700 - torqueCut*0.018 - Number(brakeEl.value)/7000, now, .04);
 
         // shift chirp / blow-off-ish transient
         if (torqueCut > 0.02) {
@@ -319,7 +338,7 @@
       }
 
       function updateHud(){
-        throttleLabel.textContent=`${throttleEl.value}%`; loadLabel.textContent=`${loadEl.value}%`; holdLabel.textContent=holdTargetEl.value; unitLabel.textContent=unitsEl.value;
+        throttleLabel.textContent=`${Number(throttleEl.value).toFixed(1)}%`; loadLabel.textContent=`${loadEl.value}%`; brakeLabel.textContent=`${brakeEl.value}%`; holdLabel.textContent=holdTargetEl.value; unitLabel.textContent=unitsEl.value; accelRateLabel.textContent=`${Number(accelRateEl.value).toFixed(1)}x`;
         const gear=Number(gearSelectEl.value), mph=speedMps*2.23694;
         rpmStat.textContent=`RPM: ${Math.round(rpm)}`; boostStat.textContent=`Boost: ${boostPsi.toFixed(1)} psi`; hpStat.textContent=`Power: ${Math.round(hp)} hp`; tqStat.textContent=`Torque: ${Math.round(tq)} Nm`;
         gearStat.textContent=`Gear: ${gear===0?'N':gear}`; warpStat.textContent=`Time Warp: ${timeWarp}x`; speedStat.textContent=`Speed: ${mph.toFixed(1)} mph`; shiftStat.textContent=`Shift: ${shiftCutTimer>0?'cut':'idle'}`;
@@ -342,15 +361,23 @@
       }
       function shift(delta){ applyShift(Number(gearSelectEl.value)+delta); }
       gearSelectEl.addEventListener('change',()=>applyShift(Number(gearSelectEl.value)));
+      oneButtonEl.addEventListener('change',()=>{
+        if (oneButtonEl.checked) {
+          oneButtonThrottle = 5;
+          throttleEl.value = 5;
+        }
+      });
 
       document.addEventListener('keydown',e=>{
-        if(e.repeat) return; const k=e.key.toLowerCase();
+        const k=e.key.toLowerCase();
+        if (k === ' ' && oneButtonEl.checked) e.preventDefault();
+        if(e.repeat) return;
         if(k==='a') ignition=!ignition; if(k==='s') starter=true; if(k==='d') dynoEnabled=!dynoEnabled; if(k==='h') rpmHoldEnabled=!rpmHoldEnabled;
         if(k==='q') throttleEl.value=25; if(k==='w') throttleEl.value=50; if(k==='e') throttleEl.value=75; if(k==='r') throttleEl.value=100;
         if(/^[1-5]$/.test(k)) timeWarp=Number(k); if(k==='g') gHeld=true; if(k===' ') spaceAccel=true;
         if(e.key==='ArrowUp') shift(1); if(e.key==='ArrowDown') shift(-1);
       });
-      document.addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); if(k==='s') starter=false; if(k==='g') gHeld=false; if(k===' ') spaceAccel=false; });
+      document.addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); if (k === ' ' && oneButtonEl.checked) e.preventDefault(); if(k==='s') starter=false; if(k==='g') gHeld=false; if(k===' ') spaceAccel=false; });
       document.addEventListener('wheel',e=>{ if(gHeld){ const d=e.deltaY>0?-100:100; holdTargetEl.value=clamp(Number(holdTargetEl.value)+d,1000,9000); e.preventDefault(); }},{passive:false});
       audioBtn.addEventListener('click',async()=>{ await ensureAudio(); audioBtn.textContent='Audio Running'; });
       resetBtn.addEventListener('click',reset);
