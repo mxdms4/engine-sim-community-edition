@@ -40,10 +40,16 @@
           <div class="row"><label>Load / dyno brake: <span id="loadLabel">20%</span></label><input id="load" type="range" min="0" max="100" value="20" /></div>
           <div class="row"><label>Brake: <span id="brakeLabel">0%</span></label><input id="brake" type="range" min="0" max="100" value="0" /></div>
           <div class="row"><label>RPM hold target: <span id="holdLabel">3000</span></label><input id="holdTarget" type="range" min="1000" max="9000" value="3000" /></div>
+          <div class="row"><label>Bore: <span id="boreLabel">86 mm</span></label><input id="bore" type="range" min="60" max="120" value="86" /></div>
+          <div class="row"><label>Stroke: <span id="strokeLabel">86 mm</span></label><input id="stroke" type="range" min="50" max="120" value="86" /></div>
           <div class="row"><label>Cylinders/Rotors: <span id="unitLabel">4</span></label><input id="units" type="range" min="2" max="12" step="1" value="4" /></div>
+          <div class="row"><label>Redline: <span id="redlineLabel">8000 rpm</span></label><input id="redline" type="range" min="5000" max="12000" step="100" value="8000" /></div>
+          <div class="row"><label>Max boost target: <span id="maxBoostLabel">14 psi</span></label><input id="maxBoost" type="range" min="0" max="35" step="0.5" value="14" /></div>
           <div class="row"><label for="gearSelect">Gear</label><select id="gearSelect"><option value="0">N</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></div>
           <div class="row"><label>One-button accel speed: <span id="accelRateLabel">4.0x</span></label><input id="accelRate" type="range" min="1" max="12" step="0.5" value="4" /></div>
+          <div class="row"><label>NOS shot: <span id="nosAmountLabel">50%</span></label><input id="nosAmount" type="range" min="0" max="100" value="50" /></div>
           <label class="checkline"><input id="oneButton" type="checkbox" /> One-button accelerate (hold Space)</label>
+          <div class="buttons"><button id="nosBtn">NOS: OFF</button></div>
 
           <div class="stats">
             <div class="stat" id="rpmStat">RPM: 700</div><div class="stat" id="boostStat">Boost: 0.0 psi</div>
@@ -62,7 +68,7 @@
           <tr><td><code>A</code></td><td>Ignition toggle</td></tr><tr><td><code>S</code></td><td>Starter (hold)</td></tr>
           <tr><td><code>D</code></td><td>Dyno toggle</td></tr><tr><td><code>H</code></td><td>RPM hold toggle</td></tr>
           <tr><td><code>Q/W/E/R</code></td><td>Throttle presets 25/50/75/100%</td></tr><tr><td><code>Space</code></td><td>One-button accelerate (if enabled)</td></tr>
-          <tr><td><code>1..5</code></td><td>Time warp</td></tr><tr><td><code>Arrow Up/Down</code></td><td>Gear up/down</td></tr><tr><td><code>G + mouse wheel</code></td><td>Adjust RPM hold target</td></tr>
+          <tr><td><code>N</code></td><td>Toggle NOS</td></tr><tr><td><code>1..5</code></td><td>Time warp</td></tr><tr><td><code>Arrow Up/Down</code></td><td>Gear up/down</td></tr><tr><td><code>G + mouse wheel</code></td><td>Adjust RPM hold target</td></tr>
         </table>
       </section>
     </main>
@@ -74,19 +80,29 @@
       const loadEl = document.getElementById('load');
       const brakeEl = document.getElementById('brake');
       const holdTargetEl = document.getElementById('holdTarget');
+      const boreEl = document.getElementById('bore');
+      const strokeEl = document.getElementById('stroke');
       const unitsEl = document.getElementById('units');
+      const redlineEl = document.getElementById('redline');
+      const maxBoostEl = document.getElementById('maxBoost');
       const engineTypeEl = document.getElementById('engineType');
       const inductionEl = document.getElementById('induction');
       const gearSelectEl = document.getElementById('gearSelect');
       const accelRateEl = document.getElementById('accelRate');
+      const nosAmountEl = document.getElementById('nosAmount');
       const oneButtonEl = document.getElementById('oneButton');
 
       const throttleLabel = document.getElementById('throttleLabel');
       const loadLabel = document.getElementById('loadLabel');
       const brakeLabel = document.getElementById('brakeLabel');
       const holdLabel = document.getElementById('holdLabel');
+      const boreLabel = document.getElementById('boreLabel');
+      const strokeLabel = document.getElementById('strokeLabel');
       const unitLabel = document.getElementById('unitLabel');
+      const redlineLabel = document.getElementById('redlineLabel');
+      const maxBoostLabel = document.getElementById('maxBoostLabel');
       const accelRateLabel = document.getElementById('accelRateLabel');
+      const nosAmountLabel = document.getElementById('nosAmountLabel');
       const rpmStat = document.getElementById('rpmStat');
       const boostStat = document.getElementById('boostStat');
       const hpStat = document.getElementById('hpStat');
@@ -100,12 +116,14 @@
       const holdState = document.getElementById('holdState');
       const audioBtn = document.getElementById('audioBtn');
       const resetBtn = document.getElementById('resetBtn');
+      const nosBtn = document.getElementById('nosBtn');
 
       const gearRatios = [0, 3.3, 2.2, 1.6, 1.25, 1.0, 0.82];
       const finalDrive = 3.42;
       const tireCirc = 2.05;
       let ignition = false, starter = false, dynoEnabled = false, rpmHoldEnabled = false;
       let gHeld = false, spaceAccel = false, timeWarp = 1;
+      let nosEnabled = false;
       let rpm = 700, angle = 0, boostPsi = 0, hp = 0, tq = 0, speedMps = 0;
       let turboSpool = 0, shiftCutTimer = 0, prevGear = 0;
       let oneButtonThrottle = 5;
@@ -154,24 +172,33 @@
         combustionOsc.start(); pulseOsc.start(); harmonicOsc.start(); whineOsc.start(); turboOsc.start(); chirpOsc.start(); whiteSrc.start();
       }
 
-      function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; oneButtonThrottle=5; throttleEl.value=0; loadEl.value=20; brakeEl.value=0; holdTargetEl.value=3000; unitsEl.value=4; gearSelectEl.value=0; prevGear=0; }
+      function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; oneButtonThrottle=5; nosEnabled=false; throttleEl.value=0; loadEl.value=20; brakeEl.value=0; holdTargetEl.value=3000; boreEl.value=86; strokeEl.value=86; unitsEl.value=4; redlineEl.value=8000; maxBoostEl.value=14; nosAmountEl.value=50; gearSelectEl.value=0; prevGear=0; nosBtn.textContent='NOS: OFF'; }
 
-      function baseTorque(r,thr,units,type){
+      function baseTorque(r,thr,units,type,boreMm,strokeMm,redline){
+        const boreM = boreMm / 1000;
+        const strokeM = strokeMm / 1000;
+        const perUnitDisp = Math.PI * Math.pow(boreM / 2, 2) * strokeM; // m^3 per cyl/rotor equiv
+        const dispScale = clamp((perUnitDisp * units) / 0.0005, 0.4, 4.0); // relative to ~2.0L 4-cyl
         const peak = type==='rotary' ? 95 + units*20 : 110 + units*17;
-        const x = r/(type==='rotary'?10000:8500);
+        const x = r/(type==='rotary' ? redline * 1.05 : redline * 1.02);
         const center = type==='rotary' ? .68 : .52;
         const width = type==='rotary' ? .33 : .25;
         const bell = Math.exp(-Math.pow((x-center)/width,2));
         const lowEnd = type==='rotary' ? .55 : .9;
-        return peak * (lowEnd + bell) * (.16 + .84*thr);
+        return peak * dispScale * (lowEnd + bell) * (.16 + .84*thr);
       }
 
       function updateModel(dt){
         const type=engineTypeEl.value, induction=inductionEl.value, units=Number(unitsEl.value);
-        const revLimit = type==='rotary' ? 9500 : 8000;
+        const boreMm = Number(boreEl.value);
+        const strokeMm = Number(strokeEl.value);
+        const redlineBase = Number(redlineEl.value);
+        const revLimit = type==='rotary' ? Math.round(redlineBase * 1.1) : redlineBase;
+        const maxBoostPsi = Number(maxBoostEl.value);
         const manualThr = Number(throttleEl.value)/100;
         const brake01 = Number(brakeEl.value)/100;
         const accelRate = Number(accelRateEl.value);
+        const nosShot = Number(nosAmountEl.value) / 100;
         let thr;
         if (oneButtonEl.checked) {
           const targetThrottle = spaceAccel ? 100 : 5;
@@ -196,15 +223,16 @@
         turboSpool = clamp(turboSpool,0,1.4);
 
         const scBoost = (induction==='supercharger'||induction==='twincharge') ? (6.2 + 3.5*rpmNorm) * thr : 0;
-        const tBoost = (induction==='turbo'||induction==='twincharge') ? 13.0 * turboSpool * thr : 0;
-        const boostTarget = scBoost + tBoost;
+        const tBoost = (induction==='turbo'||induction==='twincharge') ? (10 + maxBoostPsi * 0.5) * turboSpool * thr : 0;
+        const boostTarget = clamp(scBoost + tBoost, 0, maxBoostPsi);
         const boostRate = induction==='turbo' ? 1.9 : 4.2;
         boostPsi += (boostTarget - boostPsi) * clamp(dt*boostRate,0,1);
 
         const manifoldPsi = -8 + thr*6 + boostPsi;
         const forcedFactor = 1 + Math.max(0,boostPsi)/14.7;
 
-        let producedTorque = ignition ? baseTorque(rpm,thr,units,type)*forcedFactor : 0;
+        const nosFactor = nosEnabled ? (1 + 0.35 * nosShot * clamp(thr * 1.3, 0, 1)) : 1;
+        let producedTorque = ignition ? baseTorque(rpm,thr,units,type,boreMm,strokeMm,redlineBase)*forcedFactor*nosFactor : 0;
         if(shiftCutTimer>0){ producedTorque *= 0.2; shiftCutTimer = Math.max(0, shiftCutTimer-dt); }
 
         const engineBrake = (type==='rotary' ? 0.018 : 0.027) * rpm;
@@ -280,7 +308,8 @@
 
         gWhine.gain.setTargetAtTime(scOn ? 0.012 + rps/620 : 0.001, now, .08);
         gTurbo.gain.setTargetAtTime(tOn ? 0.008 + boostPsi/220 : 0.001, now, .08);
-        gNoise.gain.setTargetAtTime(0.012 + rough*0.02 + Math.abs(jitter)*0.002, now, .06);
+        const nosShot = Number(nosAmountEl.value) / 100;
+        gNoise.gain.setTargetAtTime(0.012 + rough*0.02 + Math.abs(jitter)*0.002 + (nosEnabled ? 0.01 * nosShot : 0), now, .06);
 
         const torqueCut = shiftCutTimer > 0 ? (shiftCutTimer / 0.12) : 0;
         gPulse.gain.setTargetAtTime(type==='rotary' ? 0.06 : 0.11, now, .05);
@@ -338,10 +367,10 @@
       }
 
       function updateHud(){
-        throttleLabel.textContent=`${Number(throttleEl.value).toFixed(1)}%`; loadLabel.textContent=`${loadEl.value}%`; brakeLabel.textContent=`${brakeEl.value}%`; holdLabel.textContent=holdTargetEl.value; unitLabel.textContent=unitsEl.value; accelRateLabel.textContent=`${Number(accelRateEl.value).toFixed(1)}x`;
+        throttleLabel.textContent=`${Number(throttleEl.value).toFixed(1)}%`; loadLabel.textContent=`${loadEl.value}%`; brakeLabel.textContent=`${brakeEl.value}%`; holdLabel.textContent=holdTargetEl.value; boreLabel.textContent=`${boreEl.value} mm`; strokeLabel.textContent=`${strokeEl.value} mm`; unitLabel.textContent=unitsEl.value; redlineLabel.textContent=`${redlineEl.value} rpm`; maxBoostLabel.textContent=`${Number(maxBoostEl.value).toFixed(1)} psi`; accelRateLabel.textContent=`${Number(accelRateEl.value).toFixed(1)}x`; nosAmountLabel.textContent=`${nosAmountEl.value}%`;
         const gear=Number(gearSelectEl.value), mph=speedMps*2.23694;
         rpmStat.textContent=`RPM: ${Math.round(rpm)}`; boostStat.textContent=`Boost: ${boostPsi.toFixed(1)} psi`; hpStat.textContent=`Power: ${Math.round(hp)} hp`; tqStat.textContent=`Torque: ${Math.round(tq)} Nm`;
-        gearStat.textContent=`Gear: ${gear===0?'N':gear}`; warpStat.textContent=`Time Warp: ${timeWarp}x`; speedStat.textContent=`Speed: ${mph.toFixed(1)} mph`; shiftStat.textContent=`Shift: ${shiftCutTimer>0?'cut':'idle'}`;
+        gearStat.textContent=`Gear: ${gear===0?'N':gear}`; warpStat.textContent=`Time Warp: ${timeWarp}x`; speedStat.textContent=`Speed: ${mph.toFixed(1)} mph`; shiftStat.textContent=`Shift: ${shiftCutTimer>0?'cut':'idle'} | NOS: ${nosEnabled?'on':'off'}`;
         setPill(ignitionState,ignition); setPill(dynoState,dynoEnabled); setPill(holdState,rpmHoldEnabled);
       }
 
@@ -367,12 +396,17 @@
           throttleEl.value = 5;
         }
       });
+      nosBtn.addEventListener('click',()=>{
+        nosEnabled = !nosEnabled;
+        nosBtn.textContent = `NOS: ${nosEnabled ? 'ON' : 'OFF'}`;
+      });
 
       document.addEventListener('keydown',e=>{
         const k=e.key.toLowerCase();
         if (k === ' ' && oneButtonEl.checked) e.preventDefault();
         if(e.repeat) return;
         if(k==='a') ignition=!ignition; if(k==='s') starter=true; if(k==='d') dynoEnabled=!dynoEnabled; if(k==='h') rpmHoldEnabled=!rpmHoldEnabled;
+        if(k==='n'){ nosEnabled=!nosEnabled; nosBtn.textContent = `NOS: ${nosEnabled ? 'ON' : 'OFF'}`; }
         if(k==='q') throttleEl.value=25; if(k==='w') throttleEl.value=50; if(k==='e') throttleEl.value=75; if(k==='r') throttleEl.value=100;
         if(/^[1-5]$/.test(k)) timeWarp=Number(k); if(k==='g') gHeld=true; if(k===' ') spaceAccel=true;
         if(e.key==='ArrowUp') shift(1); if(e.key==='ArrowDown') shift(-1);
