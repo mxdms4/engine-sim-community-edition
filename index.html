@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Engine Sim Browser Edition</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1020;
+        --panel: #18213c;
+        --panel2: #222f52;
+        --text: #e6eeff;
+        --muted: #a8b7de;
+        --accent: #6ec0ff;
+        --good: #7effbc;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, Segoe UI, Arial, sans-serif;
+        background: radial-gradient(circle at top, #1f2f58, #0a1020 60%);
+        color: var(--text);
+      }
+      .wrap { max-width: 1100px; margin: 0 auto; padding: 1rem; }
+      .card {
+        background: rgba(24, 33, 60, 0.92);
+        border: 1px solid rgba(255,255,255,.1);
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+      }
+      h1,h2 { margin: 0 0 .5rem; }
+      p { color: var(--muted); margin: .25rem 0 .75rem; }
+      .layout { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; }
+      @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+      canvas {
+        width: 100%;
+        height: 340px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.08);
+        background: linear-gradient(180deg, #111938, #0a1021 58%);
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .5rem;
+      }
+      .stat {
+        background: var(--panel2);
+        border-radius: 8px;
+        padding: .5rem;
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: .92rem;
+      }
+      .pill { display: inline-block; padding: .2rem .45rem; border-radius: 999px; font-size: .75rem; font-weight: 700; }
+      .on { background: rgba(126,255,188,.15); color: var(--good); }
+      .off { background: rgba(255,255,255,.1); color: var(--muted); }
+      .row { margin: .6rem 0; }
+      input[type="range"] { width: 100%; }
+      .buttons { display: flex; gap: .5rem; flex-wrap: wrap; }
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: .6rem .9rem;
+        background: var(--accent);
+        color: #071120;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+      th, td { border-bottom: 1px solid rgba(255,255,255,.08); text-align: left; padding: .4rem; }
+      th { color: #d8e5ff; }
+      td { color: var(--muted); }
+      code { background: rgba(255,255,255,.09); padding: .1rem .35rem; border-radius: 6px; }
+      a { color: #a9d8ff; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="card">
+        <h1>Engine Sim Browser Edition</h1>
+        <p>
+          Inspired by <a href="https://github.com/ange-yaghi/engine-sim" target="_blank" rel="noreferrer">ange-yaghi/engine-sim</a>.
+          This runs directly in Chrome via a single <code>index.html</code> file.
+        </p>
+        <div class="buttons">
+          <button id="audioBtn">Start Audio</button>
+          <button id="resetBtn">Reset Engine</button>
+        </div>
+      </section>
+
+      <section class="layout">
+        <section class="card">
+          <canvas id="view" width="1000" height="340"></canvas>
+        </section>
+
+        <section class="card">
+          <h2>Live Controls</h2>
+          <p>Keyboard controls mirror the original project style.</p>
+          <div class="row"><label>Throttle (also Q/W/E/R): <span id="throttleLabel">0%</span></label><input id="throttle" type="range" min="0" max="100" value="0" /></div>
+          <div class="row"><label>Load / dyno brake: <span id="loadLabel">20%</span></label><input id="load" type="range" min="0" max="100" value="20" /></div>
+          <div class="row"><label>RPM Hold Target (G + wheel): <span id="holdLabel">3000</span></label><input id="holdTarget" type="range" min="1000" max="7000" value="3000" /></div>
+          <div class="row"><label>Cylinders: <span id="cylLabel">4</span></label><input id="cylinders" type="range" min="2" max="12" step="2" value="4" /></div>
+          <div class="stats">
+            <div class="stat" id="rpmStat">RPM: 800</div>
+            <div class="stat" id="hpStat">Power: 0 hp</div>
+            <div class="stat" id="tqStat">Torque: 0 Nm</div>
+            <div class="stat" id="warpStat">Time Warp: 1x</div>
+          </div>
+          <p>
+            Ignition: <span id="ignitionState" class="pill off">OFF</span>
+            Dyno: <span id="dynoState" class="pill off">OFF</span>
+            RPM Hold: <span id="holdState" class="pill off">OFF</span>
+          </p>
+        </section>
+      </section>
+
+      <section class="card">
+        <h2>Keyboard Map (from Engine Sim style)</h2>
+        <table>
+          <tr><th>Key</th><th>Action in this browser demo</th></tr>
+          <tr><td><code>A</code></td><td>Toggle ignition</td></tr>
+          <tr><td><code>S</code></td><td>Starter (hold)</td></tr>
+          <tr><td><code>D</code></td><td>Toggle dyno brake/load model</td></tr>
+          <tr><td><code>H</code></td><td>Toggle RPM hold</td></tr>
+          <tr><td><code>G + Mouse Wheel</code></td><td>Adjust RPM hold target</td></tr>
+          <tr><td><code>Q/W/E/R</code></td><td>Throttle presets (25/50/75/100%)</td></tr>
+          <tr><td><code>1..5</code></td><td>Simulation time warp</td></tr>
+        </table>
+      </section>
+    </main>
+
+    <script>
+      const canvas = document.getElementById('view');
+      const ctx = canvas.getContext('2d');
+
+      const throttleEl = document.getElementById('throttle');
+      const loadEl = document.getElementById('load');
+      const holdTargetEl = document.getElementById('holdTarget');
+      const cylindersEl = document.getElementById('cylinders');
+
+      const throttleLabel = document.getElementById('throttleLabel');
+      const loadLabel = document.getElementById('loadLabel');
+      const holdLabel = document.getElementById('holdLabel');
+      const cylLabel = document.getElementById('cylLabel');
+
+      const rpmStat = document.getElementById('rpmStat');
+      const hpStat = document.getElementById('hpStat');
+      const tqStat = document.getElementById('tqStat');
+      const warpStat = document.getElementById('warpStat');
+      const ignitionState = document.getElementById('ignitionState');
+      const dynoState = document.getElementById('dynoState');
+      const holdState = document.getElementById('holdState');
+
+      const audioBtn = document.getElementById('audioBtn');
+      const resetBtn = document.getElementById('resetBtn');
+
+      let ignition = false;
+      let starter = false;
+      let dynoEnabled = false;
+      let rpmHoldEnabled = false;
+      let timeWarp = 1;
+
+      let rpm = 700;
+      let angle = 0;
+      let hp = 0;
+      let tq = 0;
+
+      let audioCtx = null;
+      let master, toneA, toneB, noiseSource, noiseGain;
+
+      function setPill(el, on) {
+        el.className = `pill ${on ? 'on' : 'off'}`;
+        el.textContent = on ? 'ON' : 'OFF';
+      }
+
+      function noiseBuffer(context) {
+        const buffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+        return buffer;
+      }
+
+      async function ensureAudio() {
+        if (audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        master = audioCtx.createGain();
+        master.gain.value = 0.12;
+        master.connect(audioCtx.destination);
+
+        toneA = audioCtx.createOscillator();
+        toneB = audioCtx.createOscillator();
+        toneA.type = 'sawtooth';
+        toneB.type = 'square';
+
+        const g1 = audioCtx.createGain();
+        g1.gain.value = 0.45;
+        const g2 = audioCtx.createGain();
+        g2.gain.value = 0.15;
+
+        toneA.connect(g1);
+        toneB.connect(g2);
+        g1.connect(master);
+        g2.connect(master);
+
+        noiseSource = audioCtx.createBufferSource();
+        noiseSource.buffer = noiseBuffer(audioCtx);
+        noiseSource.loop = true;
+        noiseGain = audioCtx.createGain();
+        noiseGain.gain.value = 0.02;
+        noiseSource.connect(noiseGain);
+        noiseGain.connect(master);
+
+        toneA.start();
+        toneB.start();
+        noiseSource.start();
+      }
+
+      function resetEngine() {
+        rpm = 700;
+        angle = 0;
+        throttleEl.value = 0;
+        loadEl.value = 20;
+        cylindersEl.value = 4;
+        holdTargetEl.value = 3000;
+      }
+
+      function torqueCurve(currentRpm, throttle01, cylinders) {
+        const peakNm = 110 + cylinders * 18;
+        const x = currentRpm / 8000;
+        const bell = Math.exp(-Math.pow((x - 0.5) / 0.28, 2));
+        return peakNm * bell * (0.2 + 0.8 * throttle01);
+      }
+
+      function updateModel(dt) {
+        const throttle01 = Number(throttleEl.value) / 100;
+        const load01 = Number(loadEl.value) / 100;
+        const cylinders = Number(cylindersEl.value);
+        const holdTarget = Number(holdTargetEl.value);
+
+        const starterTarget = starter && ignition ? 1200 : 0;
+        const combustionTarget = ignition ? 700 + throttle01 * 6500 : 0;
+        let targetRpm = Math.max(starterTarget, combustionTarget);
+
+        if (dynoEnabled) targetRpm -= 2200 * load01;
+        if (rpmHoldEnabled) targetRpm += (holdTarget - rpm) * 0.6;
+
+        targetRpm = Math.max(0, targetRpm);
+
+        rpm += (targetRpm - rpm) * Math.min(1, dt * 4.6);
+        if (!ignition && !starter) rpm *= Math.max(0, 1 - dt * 1.5);
+        rpm = Math.max(0, Math.min(8000, rpm));
+
+        tq = ignition ? torqueCurve(rpm, throttle01, cylinders) : 0;
+        hp = tq * rpm / 7127;
+
+        angle += (rpm / 60) * Math.PI * 2 * dt;
+      }
+
+      function updateAudio() {
+        if (!audioCtx) return;
+        const cylinders = Number(cylindersEl.value);
+        const base = Math.max(20, rpm / 60);
+        const now = audioCtx.currentTime;
+        toneA.frequency.setTargetAtTime(base * cylinders / 2, now, 0.02);
+        toneB.frequency.setTargetAtTime(base * cylinders, now, 0.02);
+        const rough = Number(loadEl.value) / 100;
+        noiseGain.gain.setTargetAtTime(0.008 + rough * 0.03, now, 0.03);
+        master.gain.setTargetAtTime(0.02 + Number(throttleEl.value) / 700 + (ignition ? 0.04 : 0), now, 0.04);
+      }
+
+      function draw() {
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+
+        const cylinders = Number(cylindersEl.value);
+        const crankY = h * 0.78;
+        const bankY = h * 0.45;
+
+        ctx.fillStyle = '#0f1730';
+        ctx.fillRect(24, 24, w - 48, h - 48);
+
+        ctx.strokeStyle = '#7da8ff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(50, crankY);
+        ctx.lineTo(w - 50, crankY);
+        ctx.stroke();
+
+        const spacing = (w - 140) / cylinders;
+        const radius = 14;
+
+        for (let i = 0; i < cylinders; i++) {
+          const x = 70 + i * spacing + spacing / 2;
+          const phase = angle + (i / cylinders) * Math.PI * 2;
+          const crankX = x + Math.cos(phase) * radius;
+          const crankPinY = crankY + Math.sin(phase) * radius;
+          const pistonTop = bankY - 42;
+          const travel = 36;
+          const pistonY = pistonTop + ((Math.sin(phase) + 1) / 2) * travel;
+
+          ctx.fillStyle = '#24345f';
+          ctx.fillRect(x - 24, bankY - 56, 48, 76);
+          ctx.strokeStyle = '#96b8ff';
+          ctx.strokeRect(x - 24, bankY - 56, 48, 76);
+
+          ctx.strokeStyle = '#e1ebff';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(crankX, crankPinY);
+          ctx.lineTo(x, pistonY + 8);
+          ctx.stroke();
+
+          ctx.fillStyle = '#9fd7ff';
+          ctx.fillRect(x - 18, pistonY - 10, 36, 18);
+
+          if (ignition && rpm > 600 && Math.sin(phase) > 0.93) {
+            ctx.fillStyle = 'rgba(255,180,80,.9)';
+            ctx.fillRect(x - 4, bankY - 62, 8, 7);
+          }
+        }
+      }
+
+      function updateHud() {
+        throttleLabel.textContent = `${throttleEl.value}%`;
+        loadLabel.textContent = `${loadEl.value}%`;
+        holdLabel.textContent = holdTargetEl.value;
+        cylLabel.textContent = cylindersEl.value;
+
+        rpmStat.textContent = `RPM: ${Math.round(rpm)}`;
+        hpStat.textContent = `Power: ${Math.round(hp)} hp`;
+        tqStat.textContent = `Torque: ${Math.round(tq)} Nm`;
+        warpStat.textContent = `Time Warp: ${timeWarp}x`;
+
+        setPill(ignitionState, ignition);
+        setPill(dynoState, dynoEnabled);
+        setPill(holdState, rpmHoldEnabled);
+      }
+
+      let prev = performance.now();
+      function frame(now) {
+        const rawDt = Math.min(0.05, (now - prev) / 1000);
+        prev = now;
+        const dt = rawDt * timeWarp;
+
+        updateModel(dt);
+        updateAudio();
+        draw();
+        updateHud();
+
+        requestAnimationFrame(frame);
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.repeat) return;
+        const k = e.key.toLowerCase();
+        if (k === 'a') ignition = !ignition;
+        if (k === 'd') dynoEnabled = !dynoEnabled;
+        if (k === 'h') rpmHoldEnabled = !rpmHoldEnabled;
+        if (k === 's') starter = true;
+        if (k === 'q') throttleEl.value = 25;
+        if (k === 'w') throttleEl.value = 50;
+        if (k === 'e') throttleEl.value = 75;
+        if (k === 'r') throttleEl.value = 100;
+        if (/^[1-5]$/.test(k)) timeWarp = Number(k);
+      });
+
+      document.addEventListener('keyup', (e) => {
+        if (e.key.toLowerCase() === 's') starter = false;
+      });
+
+      document.addEventListener('wheel', (e) => {
+        if (!e.getModifierState('Alt') && !e.getModifierState('Control') && (window.gHeld || false)) {
+          const delta = e.deltaY > 0 ? -100 : 100;
+          holdTargetEl.value = Math.max(1000, Math.min(7000, Number(holdTargetEl.value) + delta));
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 'g') window.gHeld = true;
+      });
+      document.addEventListener('keyup', (e) => {
+        if (e.key.toLowerCase() === 'g') window.gHeld = false;
+      });
+
+      audioBtn.addEventListener('click', async () => {
+        await ensureAudio();
+        audioBtn.textContent = 'Audio Running';
+      });
+      resetBtn.addEventListener('click', resetEngine);
+
+      requestAnimationFrame(frame);
+    </script>
+  </body>
+</html>
