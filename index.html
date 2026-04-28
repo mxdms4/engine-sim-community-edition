@@ -150,7 +150,6 @@
       let rpm = 700, angle = 0, boostPsi = 0, hp = 0, tq = 0, speedMps = 0;
       let turboSpool = 0, shiftCutTimer = 0, prevGear = 0;
       let oneButtonThrottle = 5;
-      const dynoSamples = [];
 
       let audioCtx = null;
       let master, combustionOsc, pulseOsc, harmonicOsc, whineOsc, turboOsc, chirpOsc;
@@ -196,7 +195,7 @@
         combustionOsc.start(); pulseOsc.start(); harmonicOsc.start(); whineOsc.start(); turboOsc.start(); chirpOsc.start(); whiteSrc.start();
       }
 
-      function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; oneButtonThrottle=5; nosEnabled=false; dynoSamples.length=0; throttleEl.value=0; loadEl.value=20; brakeEl.value=0; holdTargetEl.value=3000; boreEl.value=86; strokeEl.value=86; unitsEl.value=4; redlineEl.value=8000; maxBoostEl.value=14; nosAmountEl.value=50; gearSelectEl.value=0; prevGear=0; nosBtn.textContent='NOS: OFF'; }
+      function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; oneButtonThrottle=5; nosEnabled=false; throttleEl.value=0; loadEl.value=20; brakeEl.value=0; holdTargetEl.value=3000; boreEl.value=86; strokeEl.value=86; unitsEl.value=4; redlineEl.value=8000; maxBoostEl.value=14; nosAmountEl.value=50; gearSelectEl.value=0; prevGear=0; nosBtn.textContent='NOS: OFF'; }
 
       function baseTorque(r,thr,units,type,boreMm,strokeMm,redline){
         const boreM = boreMm / 1000;
@@ -365,16 +364,33 @@
         dynoCtx.moveTo(40,10); dynoCtx.lineTo(40,h-25); dynoCtx.lineTo(w-10,h-25);
         dynoCtx.stroke();
 
-        if (dynoSamples.length < 2) return;
-        const maxRpm = Math.max(...dynoSamples.map(s=>s.rpm), 1000);
-        const maxHp = Math.max(...dynoSamples.map(s=>s.hp), 50);
-        const maxTq = Math.max(...dynoSamples.map(s=>s.tq), 50);
+        const type = engineTypeEl.value;
+        const units = Number(unitsEl.value);
+        const boreMm = Number(boreEl.value);
+        const strokeMm = Number(strokeEl.value);
+        const redline = Number(redlineEl.value);
+        const maxBoostPsi = Number(maxBoostEl.value);
+        const revLimit = type === 'rotary' ? Math.round(redline * 1.1) : redline;
+        const nosShot = Number(nosAmountEl.value) / 100;
+        const nosFactor = nosEnabled ? (1 + 0.35 * nosShot) : 1;
+
+        const points = [];
+        for (let r = 1000; r <= revLimit; r += 150) {
+          const tqRaw = baseTorque(r, 1, units, type, boreMm, strokeMm, redline);
+          const boostFactor = 1 + Math.max(0, maxBoostPsi) / 14.7;
+          const tqVal = tqRaw * boostFactor * nosFactor;
+          const hpVal = tqVal * r / 7127;
+          points.push({ rpm: r, tq: tqVal, hp: hpVal });
+        }
+
+        const maxHp = Math.max(...points.map(s=>s.hp), 50);
+        const maxTq = Math.max(...points.map(s=>s.tq), 50);
 
         dynoCtx.strokeStyle = '#ff9838';
         dynoCtx.lineWidth = 2;
         dynoCtx.beginPath();
-        dynoSamples.forEach((s, i) => {
-          const x = 40 + (s.rpm / maxRpm) * (w - 55);
+        points.forEach((s, i) => {
+          const x = 40 + (s.rpm / revLimit) * (w - 55);
           const y = (h - 25) - (s.tq / maxTq) * (h - 40);
           if (i === 0) dynoCtx.moveTo(x, y); else dynoCtx.lineTo(x, y);
         });
@@ -382,15 +398,24 @@
 
         dynoCtx.strokeStyle = '#6ec0ff';
         dynoCtx.beginPath();
-        dynoSamples.forEach((s, i) => {
-          const x = 40 + (s.rpm / maxRpm) * (w - 55);
+        points.forEach((s, i) => {
+          const x = 40 + (s.rpm / revLimit) * (w - 55);
           const y = (h - 25) - (s.hp / maxHp) * (h - 40);
           if (i === 0) dynoCtx.moveTo(x, y); else dynoCtx.lineTo(x, y);
         });
         dynoCtx.stroke();
 
+        const rpmLineX = 40 + (clamp(rpm, 0, revLimit) / revLimit) * (w - 55);
+        dynoCtx.strokeStyle = '#ffffff';
+        dynoCtx.lineWidth = 1.5;
+        dynoCtx.beginPath();
+        dynoCtx.moveTo(rpmLineX, 10);
+        dynoCtx.lineTo(rpmLineX, h - 25);
+        dynoCtx.stroke();
+
         dynoCtx.fillStyle = '#ff9838'; dynoCtx.fillText('Torque', 48, 18);
         dynoCtx.fillStyle = '#6ec0ff'; dynoCtx.fillText('Power', 110, 18);
+        dynoCtx.fillStyle = '#ffffff'; dynoCtx.fillText('Current RPM', rpmLineX + 6, 18);
       }
       function drawPiston(w,h){
         const units=Number(unitsEl.value), crankY=h*.79, bankY=h*.45; ctx.strokeStyle='#7aa7ff'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(50,crankY); ctx.lineTo(w-50,crankY); ctx.stroke();
@@ -505,10 +530,6 @@
       function frame(now){
         const rawDt=Math.min(.05,(now-prev)/1000); prev=now; const dt=rawDt*timeWarp;
         updateModel(dt); updateAudio(dt); draw();
-        if (throttleEl.value > 5 && ignition) {
-          dynoSamples.push({ rpm, hp, tq });
-          if (dynoSamples.length > 220) dynoSamples.shift();
-        }
         drawDynoChart();
         updateHud();
         requestAnimationFrame(frame);
