@@ -55,16 +55,12 @@
           <div class="row"><label>NOS shot: <span id="nosAmountLabel">50%</span></label><input id="nosAmount" type="range" min="0" max="100" value="50" /></div>
           <label class="checkline"><input id="oneButton" type="checkbox" /> One-button accelerate (hold Space)</label>
           <div class="buttons"><button id="nosBtn">NOS: OFF</button></div>
-          <h2 style="margin-top:1rem">Upgrade Stages (1-6)</h2>
-          <div class="buttons">
-            <button class="stageBtn" data-stage="1">Stage 1</button>
-            <button class="stageBtn" data-stage="2">Stage 2</button>
-            <button class="stageBtn" data-stage="3">Stage 3</button>
-            <button class="stageBtn" data-stage="4">Stage 4</button>
-            <button class="stageBtn" data-stage="5">Stage 5</button>
-            <button class="stageBtn" data-stage="6">Stage 6</button>
-          </div>
-          <p id="stageDescription">No stage selected.</p>
+          <h2 style="margin-top:1rem">Part Upgrades (individual stages)</h2>
+          <div class="row"><label for="camStage">Camshaft stage</label><select id="camStage"><option value="0" selected>Stock</option><option value="1">Stage 1</option><option value="2">Stage 2</option><option value="3">Stage 3</option><option value="4">Stage 4</option><option value="5">Stage 5</option><option value="6">Stage 6</option></select></div>
+          <div class="row"><label for="valveStage">Valvetrain stage</label><select id="valveStage"><option value="0" selected>Stock</option><option value="1">Stage 1</option><option value="2">Stage 2</option><option value="3">Stage 3</option><option value="4">Stage 4</option><option value="5">Stage 5</option><option value="6">Stage 6</option></select></div>
+          <div class="row"><label for="intakeStage">Intake stage</label><select id="intakeStage"><option value="0" selected>Stock</option><option value="1">Stage 1</option><option value="2">Stage 2</option><option value="3">Stage 3</option><option value="4">Stage 4</option><option value="5">Stage 5</option><option value="6">Stage 6</option></select></div>
+          <div class="row"><label for="exhaustStage">Exhaust stage</label><select id="exhaustStage"><option value="0" selected>Stock</option><option value="1">Stage 1</option><option value="2">Stage 2</option><option value="3">Stage 3</option><option value="4">Stage 4</option><option value="5">Stage 5</option><option value="6">Stage 6</option></select></div>
+          <div class="row"><label for="fuelStage">Fuel system stage</label><select id="fuelStage"><option value="0" selected>Stock</option><option value="1">Stage 1</option><option value="2">Stage 2</option><option value="3">Stage 3</option><option value="4">Stage 4</option><option value="5">Stage 5</option><option value="6">Stage 6</option></select></div>
 
           <div class="stats">
             <div class="stat" id="rpmStat">RPM: 700</div><div class="stat" id="boostStat">Boost: 0.0 psi</div>
@@ -135,8 +131,11 @@
       const audioBtn = document.getElementById('audioBtn');
       const resetBtn = document.getElementById('resetBtn');
       const nosBtn = document.getElementById('nosBtn');
-      const stageDescription = document.getElementById('stageDescription');
-      const stageBtns = Array.from(document.querySelectorAll('.stageBtn'));
+      const camStageEl = document.getElementById('camStage');
+      const valveStageEl = document.getElementById('valveStage');
+      const intakeStageEl = document.getElementById('intakeStage');
+      const exhaustStageEl = document.getElementById('exhaustStage');
+      const fuelStageEl = document.getElementById('fuelStage');
 
       const gearRatios = [0, 3.3, 2.2, 1.6, 1.25, 1.0, 0.82];
       const finalDrive = 3.42;
@@ -192,7 +191,7 @@
         combustionOsc.start(); pulseOsc.start(); harmonicOsc.start(); whineOsc.start(); turboOsc.start(); chirpOsc.start(); whiteSrc.start();
       }
 
-      function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; oneButtonThrottle=5; nosEnabled=false; throttleEl.value=0; loadEl.value=20; brakeEl.value=0; holdTargetEl.value=3000; boreEl.value=86; strokeEl.value=86; unitsEl.value=4; redlineEl.value=8000; maxBoostEl.value=14; nosAmountEl.value=50; gearSelectEl.value=0; prevGear=0; nosBtn.textContent='NOS: OFF'; }
+      function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; oneButtonThrottle=5; nosEnabled=false; throttleEl.value=0; loadEl.value=20; brakeEl.value=0; holdTargetEl.value=3000; boreEl.value=86; strokeEl.value=86; unitsEl.value=4; redlineEl.value=8000; maxBoostEl.value=14; nosAmountEl.value=50; camStageEl.value=0; valveStageEl.value=0; intakeStageEl.value=0; exhaustStageEl.value=0; fuelStageEl.value=0; gearSelectEl.value=0; prevGear=0; nosBtn.textContent='NOS: OFF'; }
 
       function baseTorque(r,thr,units,type,boreMm,strokeMm,redline){
         const boreM = boreMm / 1000;
@@ -207,14 +206,28 @@
         const lowEnd = type==='rotary' ? .55 : .9;
         return peak * dispScale * (lowEnd + bell) * (.16 + .84*thr);
       }
+      function getPartEffects(){
+        const cam = Number(camStageEl.value);
+        const valve = Number(valveStageEl.value);
+        const intake = Number(intakeStageEl.value);
+        const exhaust = Number(exhaustStageEl.value);
+        const fuel = Number(fuelStageEl.value);
+        return {
+          torqueMult: 1 + cam*0.03 + valve*0.02 + intake*0.025 + exhaust*0.02 + fuel*0.03,
+          spoolMult: 1 + exhaust*0.04 + cam*0.02,
+          maxBoostMult: 1 + fuel*0.05 + intake*0.02,
+          redlineAdd: cam*120 + valve*140,
+        };
+      }
 
       function updateModel(dt){
         const type=engineTypeEl.value, induction=inductionEl.value, units=Number(unitsEl.value);
         const boreMm = Number(boreEl.value);
         const strokeMm = Number(strokeEl.value);
-        const redlineBase = Number(redlineEl.value);
+        const partFx = getPartEffects();
+        const redlineBase = Number(redlineEl.value) + partFx.redlineAdd;
         const revLimit = type==='rotary' ? Math.round(redlineBase * 1.1) : redlineBase;
-        const maxBoostPsi = Number(maxBoostEl.value);
+        const maxBoostPsi = Number(maxBoostEl.value) * partFx.maxBoostMult;
         const manualThr = Number(throttleEl.value)/100;
         const brake01 = Math.max(Number(brakeEl.value)/100, brakeKey ? 1 : 0);
         const accelRate = Number(accelRateEl.value);
@@ -239,7 +252,7 @@
         // forced induction realism
         const rpmNorm = clamp(rpm/revLimit,0,1);
         const exhaustEnergy = thr * (0.3 + 0.7*rpmNorm);
-        turboSpool += ((exhaustEnergy*1.2) - turboSpool) * clamp(dt*(induction==='turbo'||induction==='twincharge'?2.2:0.9),0,1);
+        turboSpool += ((exhaustEnergy*1.2*partFx.spoolMult) - turboSpool) * clamp(dt*(induction==='turbo'||induction==='twincharge'?2.2:0.9),0,1);
         turboSpool = clamp(turboSpool,0,1.4);
 
         const scBoost = (induction==='supercharger'||induction==='twincharge') ? (6.2 + 3.5*rpmNorm) * thr : 0;
@@ -252,7 +265,7 @@
         const forcedFactor = 1 + Math.max(0,boostPsi)/14.7;
 
         const nosFactor = nosEnabled ? (1 + 0.35 * nosShot * clamp(thr * 1.3, 0, 1)) : 1;
-        let producedTorque = ignition ? baseTorque(rpm,thr,units,type,boreMm,strokeMm,redlineBase)*forcedFactor*nosFactor : 0;
+        let producedTorque = ignition ? baseTorque(rpm,thr,units,type,boreMm,strokeMm,redlineBase)*forcedFactor*nosFactor*partFx.torqueMult : 0;
         if(shiftCutTimer>0){ producedTorque *= 0.2; shiftCutTimer = Math.max(0, shiftCutTimer-dt); }
 
         const engineBrake = (type==='rotary' ? 0.018 : 0.027) * rpm;
@@ -374,8 +387,9 @@
         const units = Number(unitsEl.value);
         const boreMm = Number(boreEl.value);
         const strokeMm = Number(strokeEl.value);
-        const redline = Number(redlineEl.value);
-        const maxBoostPsi = Number(maxBoostEl.value);
+        const partFx = getPartEffects();
+        const redline = Number(redlineEl.value) + partFx.redlineAdd;
+        const maxBoostPsi = Number(maxBoostEl.value) * partFx.maxBoostMult;
         const revLimit = type === 'rotary' ? Math.round(redline * 1.1) : redline;
         const nosShot = Number(nosAmountEl.value) / 100;
         const nosFactor = nosEnabled ? (1 + 0.35 * nosShot) : 1;
@@ -484,23 +498,6 @@
         prevGear = newGear;
       }
       function shift(delta){ applyShift(Number(gearSelectEl.value)+delta); }
-      function applyStage(stage){
-        const presets = {
-          1: { induction:'na', maxBoost:0, redline:7800, nos:0, desc:'Stage 1: Intake/exhaust tune, mild NA baseline.' },
-          2: { induction:'na', maxBoost:0, redline:8200, nos:20, desc:'Stage 2: Cam + fueling, optional light nitrous.' },
-          3: { induction:'supercharger', maxBoost:9, redline:8500, nos:25, desc:'Stage 3: Supercharger setup with stronger fueling.' },
-          4: { induction:'turbo', maxBoost:16, redline:9000, nos:35, desc:'Stage 4: Turbo build with higher boost ceiling.' },
-          5: { induction:'twincharge', maxBoost:24, redline:9800, nos:55, desc:'Stage 5: Twincharge race setup + aggressive nitrous.' },
-          6: { induction:'twincharge', maxBoost:32, redline:11000, nos:75, desc:'Stage 6: Max-effort drag setup, highest boost + nitrous.' },
-        };
-        const p = presets[stage];
-        if (!p) return;
-        inductionEl.value = p.induction;
-        maxBoostEl.value = p.maxBoost;
-        redlineEl.value = p.redline;
-        nosAmountEl.value = p.nos;
-        stageDescription.textContent = p.desc;
-      }
       gearSelectEl.addEventListener('change',()=>applyShift(Number(gearSelectEl.value)));
       oneButtonEl.addEventListener('change',()=>{
         if (oneButtonEl.checked) {
@@ -508,7 +505,6 @@
           throttleEl.value = 5;
         }
       });
-      stageBtns.forEach(btn=>btn.addEventListener('click',()=>applyStage(Number(btn.dataset.stage))));
       nosBtn.addEventListener('click',()=>{
         nosEnabled = !nosEnabled;
         nosBtn.textContent = `NOS: ${nosEnabled ? 'ON' : 'OFF'}`;
