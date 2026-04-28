@@ -317,21 +317,31 @@
       function updateAudio(dt){
         if(!audioCtx) return;
         const type=engineTypeEl.value, units=Number(unitsEl.value), induction=inductionEl.value;
+        const boreScale = Number(boreEl.value) / 86;
+        const strokeScale = Number(strokeEl.value) / 86;
+        const partFx = getPartEffects();
+        const camStage = Number(camStageEl.value);
+        const valveStage = Number(valveStageEl.value);
+        const intakeStage = Number(intakeStageEl.value);
+        const exhaustStage = Number(exhaustStageEl.value);
+        const fuelStage = Number(fuelStageEl.value);
         const rps=Math.max(8,rpm/60), now=audioCtx.currentTime;
 
         const firing = type==='rotary' ? (units*1.5) : (units/2);
         const uneven = type==='piston' ? 1 + 0.02*Math.sin(angle*0.5) : 1 + 0.008*Math.sin(angle*0.35);
 
-        combustionOsc.frequency.setTargetAtTime(rps*firing*uneven, now, .018);
-        pulseOsc.frequency.setTargetAtTime(rps*firing*0.5, now, .02);
-        harmonicOsc.frequency.setTargetAtTime(rps*firing*(type==='rotary'?2.4:2.0), now, .03);
+        // Bore/stroke + parts now shape both sound pitch/timbre and loudness response.
+        const combustionPitch = rps * firing * uneven * (1 + camStage * 0.012) * (1 / Math.sqrt(strokeScale));
+        combustionOsc.frequency.setTargetAtTime(combustionPitch, now, .018);
+        pulseOsc.frequency.setTargetAtTime(rps*firing*0.5*(1 + valveStage*0.01), now, .02);
+        harmonicOsc.frequency.setTargetAtTime(rps*firing*(type==='rotary'?2.4:2.0)*(1 + intakeStage*0.015), now, .03);
 
         const manifold = window.manifoldPsi ?? -5;
         const jitter = (Math.random()-0.5) * (type==='rotary'?0.7:2.1);
-        combFilter.frequency.setTargetAtTime(140 + rps*3 + manifold*8 + jitter*10, now, .05);
-        lowFilter.frequency.setTargetAtTime(1400 + Math.max(0,manifold)*120 + rps*10, now, .07);
+        combFilter.frequency.setTargetAtTime(140 + rps*3 + manifold*8 + jitter*10 + exhaustStage*25, now, .05);
+        lowFilter.frequency.setTargetAtTime(1400 + Math.max(0,manifold)*120 + rps*10 + intakeStage*55 + fuelStage*30, now, .07);
 
-        whineOsc.frequency.setTargetAtTime(500 + rps*7.2, now, .04);
+        whineOsc.frequency.setTargetAtTime(500 + rps*7.2 + camStage*18, now, .04);
         turboOsc.frequency.setTargetAtTime(850 + boostPsi*130 + rps*1.2, now, .05);
         turboFilter.frequency.setTargetAtTime(900 + boostPsi*90, now, .08);
 
@@ -339,14 +349,15 @@
         const scOn = induction==='supercharger'||induction==='twincharge';
         const tOn = induction==='turbo'||induction==='twincharge';
 
-        gWhine.gain.setTargetAtTime(scOn ? 0.012 + rps/620 : 0.001, now, .08);
-        gTurbo.gain.setTargetAtTime(tOn ? 0.008 + boostPsi/220 : 0.001, now, .08);
+        gWhine.gain.setTargetAtTime(scOn ? 0.012 + rps/620 + intakeStage*0.002 : 0.001, now, .08);
+        gTurbo.gain.setTargetAtTime(tOn ? 0.008 + boostPsi/220 + partFx.spoolMult*0.002 : 0.001, now, .08);
         const nosShot = Number(nosAmountEl.value) / 100;
-        gNoise.gain.setTargetAtTime(0.012 + rough*0.02 + Math.abs(jitter)*0.002 + (nosEnabled ? 0.01 * nosShot : 0), now, .06);
+        gNoise.gain.setTargetAtTime(0.012 + rough*0.02 + Math.abs(jitter)*0.002 + exhaustStage*0.002 + (nosEnabled ? 0.01 * nosShot : 0), now, .06);
 
         const torqueCut = shiftCutTimer > 0 ? (shiftCutTimer / 0.12) : 0;
-        gPulse.gain.setTargetAtTime(type==='rotary' ? 0.06 : 0.11, now, .05);
-        master.gain.setTargetAtTime(0.03 + Number(throttleEl.value)/700 - torqueCut*0.018 - Number(brakeEl.value)/7000, now, .04);
+        const boreLoudness = 1 + (boreScale - 1) * 0.45;
+        gPulse.gain.setTargetAtTime((type==='rotary' ? 0.06 : 0.11) * boreLoudness, now, .05);
+        master.gain.setTargetAtTime((0.03 + Number(throttleEl.value)/700 - torqueCut*0.018 - Number(brakeEl.value)/7000) * (1 + fuelStage*0.025), now, .04);
 
         // shift chirp / blow-off-ish transient
         if (torqueCut > 0.02) {
