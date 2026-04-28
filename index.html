@@ -45,6 +45,7 @@
           <h2>Controls</h2>
           <div class="row"><label for="engineType">Engine type</label><select id="engineType"><option value="piston" selected>Piston</option><option value="rotary">Rotary</option></select></div>
           <div class="row"><label for="induction">Induction</label><select id="induction"><option value="na" selected>Natural Aspirated</option><option value="supercharger">Supercharger</option><option value="turbo">Turbo</option><option value="twincharge">Turbo + Supercharger</option></select></div>
+          <div class="row"><label for="engineCharacter">Engine character</label><select id="engineCharacter"><option value="smooth" selected>Smooth</option><option value="balanced">Balanced</option><option value="aggressive">Aggressive</option><option value="race">Race</option></select></div>
           <div class="row"><label>Throttle: <span id="throttleLabel">0%</span></label><input id="throttle" type="range" min="0" max="100" value="0" /></div>
           <div class="row"><label>Load / dyno brake: <span id="loadLabel">20%</span></label><input id="load" type="range" min="0" max="100" value="20" /></div>
           <div class="row"><label>Brake: <span id="brakeLabel">0%</span></label><input id="brake" type="range" min="0" max="100" value="0" /></div>
@@ -103,6 +104,7 @@
       const redlineEl = document.getElementById('redline');
       const maxBoostEl = document.getElementById('maxBoost');
       const engineTypeEl = document.getElementById('engineType');
+      const engineCharacterEl = document.getElementById('engineCharacter');
       const inductionEl = document.getElementById('induction');
       const gearSelectEl = document.getElementById('gearSelect');
       const numGearsEl = document.getElementById('numGears');
@@ -229,7 +231,7 @@
         combustionOsc.start(); pulseOsc.start(); harmonicOsc.start(); whineOsc.start(); turboOsc.start(); chirpOsc.start(); whiteSrc.start();
       }
 
-      function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; oneButtonThrottle=0; nosEnabled=false; throttleEl.value=0; loadEl.value=20; brakeEl.value=0; holdTargetEl.value=3000; boreEl.value=86; strokeEl.value=86; unitsEl.value=4; redlineEl.value=8000; maxBoostEl.value=14; nosAmountEl.value=50; camStageEl.value=0; valveStageEl.value=0; intakeStageEl.value=0; exhaustStageEl.value=0; fuelStageEl.value=0; numGearsEl.value=6; rebuildGearSelectors(); gearSelectEl.value=0; prevGear=0; nosBtn.textContent='NOS: OFF'; }
+      function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; oneButtonThrottle=0; nosEnabled=false; throttleEl.value=0; loadEl.value=20; brakeEl.value=0; holdTargetEl.value=3000; boreEl.value=86; strokeEl.value=86; unitsEl.value=4; redlineEl.value=8000; maxBoostEl.value=14; nosAmountEl.value=50; engineCharacterEl.value='smooth'; camStageEl.value=0; valveStageEl.value=0; intakeStageEl.value=0; exhaustStageEl.value=0; fuelStageEl.value=0; numGearsEl.value=6; rebuildGearSelectors(); gearSelectEl.value=0; prevGear=0; nosBtn.textContent='NOS: OFF'; }
 
       function baseTorque(r,thr,units,type,boreMm,strokeMm,redline){
         const boreM = boreMm / 1000;
@@ -250,11 +252,22 @@
         const intake = Number(intakeStageEl.value);
         const exhaust = Number(exhaustStageEl.value);
         const fuel = Number(fuelStageEl.value);
+        const chars = {
+          smooth: { throttle: 0.85, rough: 0.6, brake: 0.85, transient: 0.6 },
+          balanced: { throttle: 1.0, rough: 1.0, brake: 1.0, transient: 1.0 },
+          aggressive: { throttle: 1.2, rough: 1.35, brake: 1.15, transient: 1.35 },
+          race: { throttle: 1.35, rough: 1.7, brake: 1.25, transient: 1.7 },
+        };
+        const c = chars[engineCharacterEl.value] || chars.balanced;
         return {
-          torqueMult: 1 + cam*0.03 + valve*0.02 + intake*0.025 + exhaust*0.02 + fuel*0.03,
-          spoolMult: 1 + exhaust*0.04 + cam*0.02,
-          maxBoostMult: 1 + fuel*0.05 + intake*0.02,
-          redlineAdd: cam*120 + valve*140,
+          torqueMult: 1 + cam*0.038 + valve*0.028 + intake*0.03 + exhaust*0.026 + fuel*0.036,
+          spoolMult: 1 + exhaust*0.055 + cam*0.025 + intake*0.02,
+          maxBoostMult: 1 + fuel*0.06 + intake*0.03,
+          redlineAdd: cam*150 + valve*170,
+          throttleResponse: c.throttle * (1 + cam*0.03),
+          roughnessMult: c.rough * (1 + exhaust*0.03 + valve*0.02),
+          engineBrakeMult: c.brake * (1 + cam*0.015),
+          transientMult: c.transient,
         };
       }
 
@@ -273,12 +286,12 @@
         let thr;
         if (oneButtonEl.checked) {
           const targetThrottle = spaceAccel ? 100 : 0;
-          oneButtonThrottle += (targetThrottle - oneButtonThrottle) * clamp(dt * accelRate, 0, 1);
+          oneButtonThrottle += (targetThrottle - oneButtonThrottle) * clamp(dt * accelRate * partFx.throttleResponse, 0, 1);
           oneButtonThrottle = clamp(oneButtonThrottle, 0, 100);
           throttleEl.value = oneButtonThrottle.toFixed(1);
           thr = oneButtonThrottle / 100;
         } else {
-          thr = manualThr;
+          thr = manualThr * clamp(partFx.throttleResponse, 0.7, 1.4);
           oneButtonThrottle = Number(throttleEl.value);
         }
         const load01 = Number(loadEl.value)/100;
@@ -306,7 +319,7 @@
         let producedTorque = ignition ? baseTorque(rpm,thr,units,type,boreMm,strokeMm,redlineBase)*forcedFactor*nosFactor*partFx.torqueMult : 0;
         if(shiftCutTimer>0){ producedTorque *= 0.2; shiftCutTimer = Math.max(0, shiftCutTimer-dt); }
 
-        const engineBrake = (type==='rotary' ? 0.018 : 0.027) * rpm;
+        const engineBrake = (type==='rotary' ? 0.018 : 0.027) * rpm * partFx.engineBrakeMult;
         const dynoBrake = dynoEnabled ? (40 + 220*load01) : 0;
 
         // drivetrain load and vehicle coupling
@@ -375,7 +388,7 @@
         harmonicOsc.frequency.setTargetAtTime(rps*firing*(type==='rotary'?2.4:2.0)*(1 + intakeStage*0.015), now, .03);
 
         const manifold = window.manifoldPsi ?? -5;
-        const jitter = (Math.random()-0.5) * (type==='rotary'?0.7:2.1);
+        const jitter = (Math.random()-0.5) * (type==='rotary'?0.7:2.1) * partFx.roughnessMult;
         combFilter.frequency.setTargetAtTime(140 + rps*3 + manifold*8 + jitter*10 + exhaustStage*25, now, .05);
         lowFilter.frequency.setTargetAtTime(1400 + Math.max(0,manifold)*120 + rps*10 + intakeStage*55 + fuelStage*30, now, .07);
 
@@ -383,7 +396,7 @@
         turboOsc.frequency.setTargetAtTime(850 + boostPsi*130 + rps*1.2, now, .05);
         turboFilter.frequency.setTargetAtTime(900 + boostPsi*90, now, .08);
 
-        const rough = Number(loadEl.value)/100 + Number(brakeEl.value)/220;
+        const rough = (Number(loadEl.value)/100 + Number(brakeEl.value)/220) * partFx.roughnessMult;
         const scOn = induction==='supercharger'||induction==='twincharge';
         const tOn = induction==='turbo'||induction==='twincharge';
 
@@ -399,15 +412,15 @@
 
         // shift chirp / blow-off-ish transient
         if (torqueCut > 0.02) {
-          const chirpFreq = 1800 + torqueCut*2400;
+          const chirpFreq = 1800 + torqueCut*2400*partFx.transientMult;
           chirpOsc.frequency.setTargetAtTime(chirpFreq, now, .01);
-          gChirp.gain.setTargetAtTime(0.03 * torqueCut, now, .01);
+          gChirp.gain.setTargetAtTime(0.03 * torqueCut * partFx.transientMult, now, .01);
         } else {
           gChirp.gain.setTargetAtTime(0, now, .04);
         }
 
         // occasional exhaust crackle for realism on lift
-        if(ignition && Math.random()<0.005 && Number(throttleEl.value)<18 && rpm>3200){
+        if(ignition && Math.random()<(0.005*partFx.roughnessMult) && Number(throttleEl.value)<18 && rpm>3200){
           gNoise.gain.setValueAtTime(0.07, now);
         }
       }
