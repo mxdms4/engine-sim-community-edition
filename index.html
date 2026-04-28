@@ -27,12 +27,16 @@
       <section class="card">
         <h1>Engine Sim Browser Edition</h1>
         <p>Inspired by <a href="https://github.com/ange-yaghi/engine-sim" target="_blank" rel="noreferrer">ange-yaghi/engine-sim</a>. Rotary/piston model, forced induction, and improved shift/engine audio behavior.</p>
-        <div class="buttons"><button id="audioBtn">Start Audio</button><button id="resetBtn">Reset</button><button id="simPageBtn">Simulator Page</button><button id="upgradesPageBtn">Upgrade Stages Page</button></div>
+        <div class="buttons"><button id="audioBtn">Start Audio</button><button id="resetBtn">Reset</button></div>
       </section>
 
       <section id="simPage" class="layout">
-        <section class="card"><canvas id="view" width="1024" height="360"></canvas></section>
-        <section class="card"><h2>Dyno Chart (Torque + Power)</h2><canvas id="dynoCanvas" width="1024" height="220"></canvas></section>
+        <section class="card">
+          <h2>Engine Simulation</h2>
+          <canvas id="view" width="1180" height="360"></canvas>
+          <h2 style="margin-top:1rem">Dyno Chart (Torque + Power)</h2>
+          <canvas id="dynoCanvas" width="1180" height="240"></canvas>
+        </section>
         <section class="card">
           <h2>Controls</h2>
           <div class="row"><label for="engineType">Engine type</label><select id="engineType"><option value="piston" selected>Piston</option><option value="rotary">Rotary</option></select></div>
@@ -51,6 +55,16 @@
           <div class="row"><label>NOS shot: <span id="nosAmountLabel">50%</span></label><input id="nosAmount" type="range" min="0" max="100" value="50" /></div>
           <label class="checkline"><input id="oneButton" type="checkbox" /> One-button accelerate (hold Space)</label>
           <div class="buttons"><button id="nosBtn">NOS: OFF</button></div>
+          <h2 style="margin-top:1rem">Upgrade Stages (1-6)</h2>
+          <div class="buttons">
+            <button class="stageBtn" data-stage="1">Stage 1</button>
+            <button class="stageBtn" data-stage="2">Stage 2</button>
+            <button class="stageBtn" data-stage="3">Stage 3</button>
+            <button class="stageBtn" data-stage="4">Stage 4</button>
+            <button class="stageBtn" data-stage="5">Stage 5</button>
+            <button class="stageBtn" data-stage="6">Stage 6</button>
+          </div>
+          <p id="stageDescription">No stage selected.</p>
 
           <div class="stats">
             <div class="stat" id="rpmStat">RPM: 700</div><div class="stat" id="boostStat">Boost: 0.0 psi</div>
@@ -62,25 +76,12 @@
         </section>
       </section>
 
-      <section id="upgradesPage" class="card" style="display:none">
-        <h2>Upgrade Stages (1-6)</h2>
-        <p>Pick a stage preset to quickly apply performance upgrades.</p>
-        <div class="buttons">
-          <button class="stageBtn" data-stage="1">Stage 1</button>
-          <button class="stageBtn" data-stage="2">Stage 2</button>
-          <button class="stageBtn" data-stage="3">Stage 3</button>
-          <button class="stageBtn" data-stage="4">Stage 4</button>
-          <button class="stageBtn" data-stage="5">Stage 5</button>
-          <button class="stageBtn" data-stage="6">Stage 6</button>
-        </div>
-        <p id="stageDescription">No stage selected.</p>
-      </section>
-
       <section class="card">
         <h2>Key Map</h2>
         <table>
           <tr><th>Key</th><th>Action</th></tr>
           <tr><td><code>A</code></td><td>Ignition toggle</td></tr><tr><td><code>S</code></td><td>Starter (hold)</td></tr>
+          <tr><td><code>B</code></td><td>Brake (hold)</td></tr>
           <tr><td><code>D</code></td><td>Dyno toggle</td></tr><tr><td><code>H</code></td><td>RPM hold toggle</td></tr>
           <tr><td><code>Q/W/E/R</code></td><td>Throttle presets 25/50/75/100%</td></tr><tr><td><code>Space</code></td><td>One-button accelerate (if enabled)</td></tr>
           <tr><td><code>N</code></td><td>Toggle NOS</td></tr><tr><td><code>1..5</code></td><td>Time warp</td></tr><tr><td><code>Arrow Up/Down</code></td><td>Gear up/down</td></tr><tr><td><code>G + mouse wheel</code></td><td>Adjust RPM hold target</td></tr>
@@ -134,10 +135,6 @@
       const audioBtn = document.getElementById('audioBtn');
       const resetBtn = document.getElementById('resetBtn');
       const nosBtn = document.getElementById('nosBtn');
-      const simPageBtn = document.getElementById('simPageBtn');
-      const upgradesPageBtn = document.getElementById('upgradesPageBtn');
-      const simPage = document.getElementById('simPage');
-      const upgradesPage = document.getElementById('upgradesPage');
       const stageDescription = document.getElementById('stageDescription');
       const stageBtns = Array.from(document.querySelectorAll('.stageBtn'));
 
@@ -145,7 +142,7 @@
       const finalDrive = 3.42;
       const tireCirc = 2.05;
       let ignition = false, starter = false, dynoEnabled = false, rpmHoldEnabled = false;
-      let gHeld = false, spaceAccel = false, timeWarp = 1;
+      let gHeld = false, spaceAccel = false, brakeKey = false, timeWarp = 1;
       let nosEnabled = false;
       let rpm = 700, angle = 0, boostPsi = 0, hp = 0, tq = 0, speedMps = 0;
       let turboSpool = 0, shiftCutTimer = 0, prevGear = 0;
@@ -219,7 +216,7 @@
         const revLimit = type==='rotary' ? Math.round(redlineBase * 1.1) : redlineBase;
         const maxBoostPsi = Number(maxBoostEl.value);
         const manualThr = Number(throttleEl.value)/100;
-        const brake01 = Number(brakeEl.value)/100;
+        const brake01 = Math.max(Number(brakeEl.value)/100, brakeKey ? 1 : 0);
         const accelRate = Number(accelRateEl.value);
         const nosShot = Number(nosAmountEl.value) / 100;
         let thr;
@@ -353,7 +350,16 @@
         }
       }
 
-      function draw(){ const w=canvas.width,h=canvas.height; ctx.clearRect(0,0,w,h); ctx.fillStyle='#0f1730'; ctx.fillRect(20,20,w-40,h-40); if(engineTypeEl.value==='rotary') drawRotary(w,h); else drawPiston(w,h); }
+      function draw(){
+        const w=canvas.width,h=canvas.height;
+        ctx.clearRect(0,0,w,h);
+        ctx.fillStyle='#0f1730';
+        ctx.fillRect(20,20,w-40,h-40);
+        if(engineTypeEl.value==='rotary') drawRotary(w,h); else drawPiston(w,h);
+        ctx.fillStyle = '#d6e5ff';
+        ctx.font = '16px monospace';
+        ctx.fillText(`Bore: ${boreEl.value} mm  Stroke: ${strokeEl.value} mm`, 40, 44);
+      }
       function drawDynoChart(){
         const w = dynoCanvas.width, h = dynoCanvas.height;
         dynoCtx.clearRect(0,0,w,h);
@@ -419,19 +425,22 @@
       }
       function drawPiston(w,h){
         const units=Number(unitsEl.value), crankY=h*.79, bankY=h*.45; ctx.strokeStyle='#7aa7ff'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(50,crankY); ctx.lineTo(w-50,crankY); ctx.stroke();
+        const boreScale = Number(boreEl.value) / 86;
+        const strokeScale = Number(strokeEl.value) / 86;
         const spacing=(w-150)/units;
         for(let i=0;i<units;i++){
           const x=75+i*spacing+spacing*.5, phase=angle+(i/units)*Math.PI*2, crankX=x+Math.cos(phase)*15, crankYp=crankY+Math.sin(phase)*15;
-          const rodLen=48; const pistonY=bankY-62+rodLen-(Math.cos(phase)*14 + Math.sqrt(Math.max(1,rodLen*rodLen - Math.sin(phase)*Math.sin(phase)*14*14)));
-          ctx.fillStyle='#24345f'; ctx.fillRect(x-24,bankY-56,48,76); ctx.strokeStyle='#94b7ff'; ctx.strokeRect(x-24,bankY-56,48,76);
+          const rodLen=48 * strokeScale; const pistonY=bankY-62+rodLen-(Math.cos(phase)*14*strokeScale + Math.sqrt(Math.max(1,rodLen*rodLen - Math.sin(phase)*Math.sin(phase)*14*14*strokeScale)));
+          const cylWidth = 48 * boreScale;
+          ctx.fillStyle='#24345f'; ctx.fillRect(x-cylWidth/2,bankY-56,cylWidth,76); ctx.strokeStyle='#94b7ff'; ctx.strokeRect(x-cylWidth/2,bankY-56,cylWidth,76);
           ctx.strokeStyle='#e0ebff'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(crankX,crankYp); ctx.lineTo(x,pistonY+8); ctx.stroke();
-          ctx.fillStyle='#9fd7ff'; ctx.fillRect(x-18,pistonY-10,36,18);
+          ctx.fillStyle='#9fd7ff'; ctx.fillRect(x-(36*boreScale)/2,pistonY-10,36*boreScale,18);
         }
       }
       function drawRotary(w,h){
         const rotors=Math.max(1,Number(unitsEl.value)); const spacing=(w-140)/rotors;
         for(let i=0;i<rotors;i++){
-          const cx=70+i*spacing+spacing/2, cy=h/2, R=52;
+          const cx=70+i*spacing+spacing/2, cy=h/2, R=52*(Number(strokeEl.value)/86);
           // simplified epitrochoid housing
           ctx.strokeStyle='#95b8ff'; ctx.lineWidth=2.5; ctx.beginPath();
           for(let t=0;t<=Math.PI*2+0.02;t+=0.04){
@@ -475,10 +484,6 @@
         prevGear = newGear;
       }
       function shift(delta){ applyShift(Number(gearSelectEl.value)+delta); }
-      function showPage(which){
-        simPage.style.display = which === 'sim' ? 'grid' : 'none';
-        upgradesPage.style.display = which === 'upgrades' ? 'block' : 'none';
-      }
       function applyStage(stage){
         const presets = {
           1: { induction:'na', maxBoost:0, redline:7800, nos:0, desc:'Stage 1: Intake/exhaust tune, mild NA baseline.' },
@@ -503,8 +508,6 @@
           throttleEl.value = 5;
         }
       });
-      simPageBtn.addEventListener('click',()=>showPage('sim'));
-      upgradesPageBtn.addEventListener('click',()=>showPage('upgrades'));
       stageBtns.forEach(btn=>btn.addEventListener('click',()=>applyStage(Number(btn.dataset.stage))));
       nosBtn.addEventListener('click',()=>{
         nosEnabled = !nosEnabled;
@@ -516,12 +519,13 @@
         if (k === ' ' && oneButtonEl.checked) e.preventDefault();
         if(e.repeat) return;
         if(k==='a') ignition=!ignition; if(k==='s') starter=true; if(k==='d') dynoEnabled=!dynoEnabled; if(k==='h') rpmHoldEnabled=!rpmHoldEnabled;
+        if(k==='b') brakeKey=true;
         if(k==='n'){ nosEnabled=!nosEnabled; nosBtn.textContent = `NOS: ${nosEnabled ? 'ON' : 'OFF'}`; }
         if(k==='q') throttleEl.value=25; if(k==='w') throttleEl.value=50; if(k==='e') throttleEl.value=75; if(k==='r') throttleEl.value=100;
         if(/^[1-5]$/.test(k)) timeWarp=Number(k); if(k==='g') gHeld=true; if(k===' ') spaceAccel=true;
         if(e.key==='ArrowUp') shift(1); if(e.key==='ArrowDown') shift(-1);
       });
-      document.addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); if (k === ' ' && oneButtonEl.checked) e.preventDefault(); if(k==='s') starter=false; if(k==='g') gHeld=false; if(k===' ') spaceAccel=false; });
+      document.addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); if (k === ' ' && oneButtonEl.checked) e.preventDefault(); if(k==='s') starter=false; if(k==='g') gHeld=false; if(k===' ') spaceAccel=false; if(k==='b') brakeKey=false; });
       document.addEventListener('wheel',e=>{ if(gHeld){ const d=e.deltaY>0?-100:100; holdTargetEl.value=clamp(Number(holdTargetEl.value)+d,1000,9000); e.preventDefault(); }},{passive:false});
       audioBtn.addEventListener('click',async()=>{ await ensureAudio(); audioBtn.textContent='Audio Running'; });
       resetBtn.addEventListener('click',reset);
