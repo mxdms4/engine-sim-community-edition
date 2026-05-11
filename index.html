@@ -238,6 +238,9 @@
         whiteSrc=audioCtx.createBufferSource(); whiteSrc.buffer=makeNoise(audioCtx); whiteSrc.loop=true; whiteSrc.connect(gNoise); gNoise.connect(noiseFilter); noiseFilter.connect(master);
 
         combustionOsc.start(); pulseOsc.start(); harmonicOsc.start(); whineOsc.start(); turboOsc.start(); chirpOsc.start(); whiteSrc.start();
+        if (audioCtx.state === 'suspended') {
+          await audioCtx.resume();
+        }
       }
 
       function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; oneButtonThrottle=0; nosEnabled=false; throttleEl.value=0; loadEl.value=20; brakeEl.value=0; holdTargetEl.value=3000; boreEl.value=86; strokeEl.value=86; unitsEl.value=4; redlineEl.value=8000; maxBoostEl.value=14; nosAmountEl.value=50; engineCharacterEl.value='smooth'; fuelTypeEl.value='gas'; fuelSystemEl.value='efi'; strokeTypeEl.value='4'; idleRpmEl.value=850; camStageEl.value=0; valveStageEl.value=0; intakeStageEl.value=0; exhaustStageEl.value=0; fuelStageEl.value=0; numGearsEl.value=6; rebuildGearSelectors(); gearSelectEl.value=0; prevGear=0; nosBtn.textContent='NOS: OFF'; }
@@ -522,6 +525,15 @@
         const boreScale = Number(boreEl.value) / 86;
         const strokeScale = Number(strokeEl.value) / 86;
         const spacing=(w-150)/units;
+        // camshafts / valvetrain rails
+        ctx.strokeStyle = '#b5c7ef';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(40, bankY - 72);
+        ctx.lineTo(w - 40, bankY - 72);
+        ctx.moveTo(40, bankY - 66);
+        ctx.lineTo(w - 40, bankY - 66);
+        ctx.stroke();
         for(let i=0;i<units;i++){
           const x=75+i*spacing+spacing*.5, phase=angle+(i/units)*Math.PI*2, crankX=x+Math.cos(phase)*15, crankYp=crankY+Math.sin(phase)*15;
           const rodLen=48 * strokeScale; const pistonY=bankY-62+rodLen-(Math.cos(phase)*14*strokeScale + Math.sqrt(Math.max(1,rodLen*rodLen - Math.sin(phase)*Math.sin(phase)*14*14*strokeScale)));
@@ -529,6 +541,29 @@
           ctx.fillStyle='#24345f'; ctx.fillRect(x-cylWidth/2,bankY-56,cylWidth,76); ctx.strokeStyle='#94b7ff'; ctx.strokeRect(x-cylWidth/2,bankY-56,cylWidth,76);
           ctx.strokeStyle='#e0ebff'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(crankX,crankYp); ctx.lineTo(x,pistonY+8); ctx.stroke();
           ctx.fillStyle='#9fd7ff'; ctx.fillRect(x-(36*boreScale)/2,pistonY-10,36*boreScale,18);
+
+          // valves (intake/exhaust)
+          const valveLiftA = Math.max(0, Math.sin(phase * 0.5)) * 8;
+          const valveLiftB = Math.max(0, Math.sin(phase * 0.5 + Math.PI * 0.7)) * 8;
+          ctx.strokeStyle = '#d6deef';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(x - cylWidth * 0.22, bankY - 70);
+          ctx.lineTo(x - cylWidth * 0.22, bankY - 52 + valveLiftA);
+          ctx.moveTo(x + cylWidth * 0.22, bankY - 70);
+          ctx.lineTo(x + cylWidth * 0.22, bankY - 52 + valveLiftB);
+          ctx.stroke();
+        }
+        // crank counterweights
+        ctx.fillStyle = '#7f91b9';
+        for(let i=0;i<units;i++){
+          const x=75+i*spacing+spacing*.5;
+          const phase=angle+(i/units)*Math.PI*2;
+          const cwX = x - Math.cos(phase) * 11;
+          const cwY = crankY - Math.sin(phase) * 11;
+          ctx.beginPath();
+          ctx.arc(cwX, cwY, 6, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
       function drawRotary(w,h){
@@ -605,7 +640,11 @@
       });
       document.addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); if (k === ' ' && oneButtonEl.checked) e.preventDefault(); if(k==='s') starter=false; if(k==='g') gHeld=false; if(k===' ') spaceAccel=false; if(k==='b') brakeKey=false; });
       document.addEventListener('wheel',e=>{ if(gHeld){ const d=e.deltaY>0?-100:100; holdTargetEl.value=clamp(Number(holdTargetEl.value)+d,1000,9000); e.preventDefault(); }},{passive:false});
-      audioBtn.addEventListener('click',async()=>{ await ensureAudio(); audioBtn.textContent='Audio Running'; });
+      audioBtn.addEventListener('click',async()=>{
+        await ensureAudio();
+        if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+        audioBtn.textContent='Audio Running';
+      });
       resetBtn.addEventListener('click',reset);
       rebuildGearSelectors();
 
