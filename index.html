@@ -34,7 +34,7 @@
         <section class="card">
           <h2>Engine Simulation</h2>
           <canvas id="view" width="1180" height="360"></canvas>
-          <h2 style="margin-top:1rem">Dyno Chart (Torque + Power)</h2>
+          <h2 style="margin-top:1rem">Dyno Chart (clear view: torque/orange, power/blue, rpm/white)</h2>
           <canvas id="dynoCanvas" width="1180" height="240"></canvas>
           <h2 style="margin-top:1rem">Transmission Setup</h2>
           <div class="row"><label for="numGears">Number of gears</label><select id="numGears"><option value="4">4</option><option value="5">5</option><option value="6" selected>6</option><option value="7">7</option><option value="8">8</option></select></div>
@@ -45,6 +45,10 @@
           <h2>Controls</h2>
           <div class="row"><label for="engineType">Engine type</label><select id="engineType"><option value="piston" selected>Piston</option><option value="rotary">Rotary</option></select></div>
           <div class="row"><label for="induction">Induction</label><select id="induction"><option value="na" selected>Natural Aspirated</option><option value="supercharger">Supercharger</option><option value="turbo">Turbo</option><option value="twincharge">Turbo + Supercharger</option></select></div>
+          <div class="row"><label for="fuelType">Fuel type</label><select id="fuelType"><option value="gas" selected>Gasoline</option><option value="diesel">Diesel</option></select></div>
+          <div class="row"><label for="fuelSystem">Fuel system</label><select id="fuelSystem"><option value="efi" selected>EFI</option><option value="carb_1">Carb: 1-barrel</option><option value="carb_2">Carb: 2-barrel</option><option value="carb_4">Carb: 4-barrel</option><option value="itb">ITB</option></select></div>
+          <div class="row"><label for="strokeType">Engine cycle</label><select id="strokeType"><option value="2">2-stroke</option><option value="4" selected>4-stroke</option><option value="6">6-stroke</option></select></div>
+          <div class="row"><label>Idle RPM: <span id="idleRpmLabel">850</span></label><input id="idleRpm" type="range" min="500" max="1800" step="10" value="850" /></div>
           <div class="row"><label for="engineCharacter">Engine character</label><select id="engineCharacter"><option value="smooth" selected>Smooth</option><option value="balanced">Balanced</option><option value="aggressive">Aggressive</option><option value="race">Race</option></select></div>
           <div class="row"><label>Throttle: <span id="throttleLabel">0%</span></label><input id="throttle" type="range" min="0" max="100" value="0" /></div>
           <div class="row"><label>Load / dyno brake: <span id="loadLabel">20%</span></label><input id="load" type="range" min="0" max="100" value="20" /></div>
@@ -52,7 +56,7 @@
           <div class="row"><label>RPM hold target: <span id="holdLabel">3000</span></label><input id="holdTarget" type="range" min="1000" max="9000" value="3000" /></div>
           <div class="row"><label>Bore: <span id="boreLabel">86 mm</span></label><input id="bore" type="range" min="60" max="120" value="86" /></div>
           <div class="row"><label>Stroke: <span id="strokeLabel">86 mm</span></label><input id="stroke" type="range" min="50" max="120" value="86" /></div>
-          <div class="row"><label>Cylinders/Rotors: <span id="unitLabel">4</span></label><input id="units" type="range" min="2" max="12" step="1" value="4" /></div>
+          <div class="row"><label>Cylinders/Rotors: <span id="unitLabel">4</span></label><input id="units" type="range" min="1" max="12" step="1" value="4" /></div>
           <div class="row"><label>Redline: <span id="redlineLabel">8000 rpm</span></label><input id="redline" type="range" min="5000" max="12000" step="100" value="8000" /></div>
           <div class="row"><label>Max boost target: <span id="maxBoostLabel">14 psi</span></label><input id="maxBoost" type="range" min="0" max="35" step="0.5" value="14" /></div>
           <div class="row"><label>One-button accel speed: <span id="accelRateLabel">4.0x</span></label><input id="accelRate" type="range" min="1" max="12" step="0.5" value="4" /></div>
@@ -106,6 +110,10 @@
       const engineTypeEl = document.getElementById('engineType');
       const engineCharacterEl = document.getElementById('engineCharacter');
       const inductionEl = document.getElementById('induction');
+      const fuelTypeEl = document.getElementById('fuelType');
+      const fuelSystemEl = document.getElementById('fuelSystem');
+      const strokeTypeEl = document.getElementById('strokeType');
+      const idleRpmEl = document.getElementById('idleRpm');
       const gearSelectEl = document.getElementById('gearSelect');
       const numGearsEl = document.getElementById('numGears');
       const gearRatiosEditorEl = document.getElementById('gearRatiosEditor');
@@ -114,6 +122,7 @@
       const oneButtonEl = document.getElementById('oneButton');
 
       const throttleLabel = document.getElementById('throttleLabel');
+      const idleRpmLabel = document.getElementById('idleRpmLabel');
       const loadLabel = document.getElementById('loadLabel');
       const brakeLabel = document.getElementById('brakeLabel');
       const holdLabel = document.getElementById('holdLabel');
@@ -231,7 +240,7 @@
         combustionOsc.start(); pulseOsc.start(); harmonicOsc.start(); whineOsc.start(); turboOsc.start(); chirpOsc.start(); whiteSrc.start();
       }
 
-      function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; oneButtonThrottle=0; nosEnabled=false; throttleEl.value=0; loadEl.value=20; brakeEl.value=0; holdTargetEl.value=3000; boreEl.value=86; strokeEl.value=86; unitsEl.value=4; redlineEl.value=8000; maxBoostEl.value=14; nosAmountEl.value=50; engineCharacterEl.value='smooth'; camStageEl.value=0; valveStageEl.value=0; intakeStageEl.value=0; exhaustStageEl.value=0; fuelStageEl.value=0; numGearsEl.value=6; rebuildGearSelectors(); gearSelectEl.value=0; prevGear=0; nosBtn.textContent='NOS: OFF'; }
+      function reset(){ rpm=700; angle=0; boostPsi=0; hp=0; tq=0; speedMps=0; turboSpool=0; shiftCutTimer=0; oneButtonThrottle=0; nosEnabled=false; throttleEl.value=0; loadEl.value=20; brakeEl.value=0; holdTargetEl.value=3000; boreEl.value=86; strokeEl.value=86; unitsEl.value=4; redlineEl.value=8000; maxBoostEl.value=14; nosAmountEl.value=50; engineCharacterEl.value='smooth'; fuelTypeEl.value='gas'; fuelSystemEl.value='efi'; strokeTypeEl.value='4'; idleRpmEl.value=850; camStageEl.value=0; valveStageEl.value=0; intakeStageEl.value=0; exhaustStageEl.value=0; fuelStageEl.value=0; numGearsEl.value=6; rebuildGearSelectors(); gearSelectEl.value=0; prevGear=0; nosBtn.textContent='NOS: OFF'; }
 
       function baseTorque(r,thr,units,type,boreMm,strokeMm,redline){
         const boreM = boreMm / 1000;
@@ -252,6 +261,9 @@
         const intake = Number(intakeStageEl.value);
         const exhaust = Number(exhaustStageEl.value);
         const fuel = Number(fuelStageEl.value);
+        const fuelType = fuelTypeEl.value;
+        const fuelSystem = fuelSystemEl.value;
+        const strokeType = Number(strokeTypeEl.value);
         const chars = {
           smooth: { throttle: 0.85, rough: 0.6, brake: 0.85, transient: 0.6 },
           balanced: { throttle: 1.0, rough: 1.0, brake: 1.0, transient: 1.0 },
@@ -259,13 +271,16 @@
           race: { throttle: 1.35, rough: 1.7, brake: 1.25, transient: 1.7 },
         };
         const c = chars[engineCharacterEl.value] || chars.balanced;
+        const fuelTypeFx = fuelType === 'diesel' ? { torque: 1.22, redline: -1400, rough: 1.15, spool: 0.9 } : { torque: 1.0, redline: 0, rough: 1.0, spool: 1.0 };
+        const fuelSystemFx = { efi: { throttle: 1.08, chop: 0.9 }, carb_1: { throttle: 0.82, chop: 1.25 }, carb_2: { throttle: 0.9, chop: 1.15 }, carb_4: { throttle: 1.0, chop: 1.05 }, itb: { throttle: 1.18, chop: 1.3 } }[fuelSystem] || { throttle:1, chop:1 };
+        const cycleFx = strokeType === 2 ? { power:1.22, smooth:0.8 } : strokeType === 6 ? { power:0.9, smooth:1.25 } : { power:1.0, smooth:1.0 };
         return {
-          torqueMult: 1 + cam*0.038 + valve*0.028 + intake*0.03 + exhaust*0.026 + fuel*0.036,
-          spoolMult: 1 + exhaust*0.055 + cam*0.025 + intake*0.02,
+          torqueMult: (1 + cam*0.038 + valve*0.028 + intake*0.03 + exhaust*0.026 + fuel*0.036) * fuelTypeFx.torque * cycleFx.power,
+          spoolMult: (1 + exhaust*0.055 + cam*0.025 + intake*0.02) * fuelTypeFx.spool,
           maxBoostMult: 1 + fuel*0.06 + intake*0.03,
-          redlineAdd: cam*150 + valve*170,
-          throttleResponse: c.throttle * (1 + cam*0.03),
-          roughnessMult: c.rough * (1 + exhaust*0.03 + valve*0.02),
+          redlineAdd: cam*150 + valve*170 + fuelTypeFx.redline,
+          throttleResponse: c.throttle * fuelSystemFx.throttle * (1 + cam*0.03),
+          roughnessMult: c.rough * fuelTypeFx.rough * fuelSystemFx.chop * cycleFx.smooth * (1 + exhaust*0.03 + valve*0.02 + cam*0.03),
           engineBrakeMult: c.brake * (1 + cam*0.015),
           transientMult: c.transient,
         };
@@ -298,7 +313,7 @@
         const gear = Number(gearSelectEl.value), ratio = gearRatios[gear];
 
         const starterTarget = starter && ignition ? 1150 : 0;
-        const idleTarget = ignition ? 850 : 0;
+        const idleTarget = ignition ? Number(idleRpmEl.value) : 0;
 
         // forced induction realism
         const rpmNorm = clamp(rpm/revLimit,0,1);
@@ -371,7 +386,6 @@
         const boreScale = Number(boreEl.value) / 86;
         const strokeScale = Number(strokeEl.value) / 86;
         const partFx = getPartEffects();
-        const camStage = Number(camStageEl.value);
         const valveStage = Number(valveStageEl.value);
         const intakeStage = Number(intakeStageEl.value);
         const exhaustStage = Number(exhaustStageEl.value);
@@ -379,7 +393,8 @@
         const rps=Math.max(8,rpm/60), now=audioCtx.currentTime;
 
         const firing = type==='rotary' ? (units*1.5) : (units/2);
-        const uneven = type==='piston' ? 1 + 0.02*Math.sin(angle*0.5) : 1 + 0.008*Math.sin(angle*0.35);
+        const camStage = Number(camStageEl.value);
+        const uneven = type==='piston' ? 1 + (0.02 + camStage*0.01*partFx.roughnessMult)*Math.sin(angle*0.5) : 1 + (0.008 + camStage*0.006)*Math.sin(angle*0.35);
 
         // Bore/stroke + parts now shape both sound pitch/timbre and loudness response.
         const combustionPitch = rps * firing * uneven * (1 + camStage * 0.012) * (1 / Math.sqrt(strokeScale));
@@ -444,6 +459,9 @@
         dynoCtx.beginPath();
         dynoCtx.moveTo(40,10); dynoCtx.lineTo(40,h-25); dynoCtx.lineTo(w-10,h-25);
         dynoCtx.stroke();
+        dynoCtx.strokeStyle='rgba(255,255,255,.08)';
+        for(let i=1;i<=5;i++){const y=10+i*(h-35)/6; dynoCtx.beginPath(); dynoCtx.moveTo(40,y); dynoCtx.lineTo(w-10,y); dynoCtx.stroke();}
+        for(let i=1;i<=6;i++){const x=40+i*(w-55)/7; dynoCtx.beginPath(); dynoCtx.moveTo(x,10); dynoCtx.lineTo(x,h-25); dynoCtx.stroke();}
 
         const type = engineTypeEl.value;
         const units = Number(unitsEl.value);
@@ -538,6 +556,7 @@
       }
 
       function updateHud(){
+        idleRpmLabel.textContent = String(idleRpmEl.value);
         throttleLabel.textContent=`${Number(throttleEl.value).toFixed(1)}%`; loadLabel.textContent=`${loadEl.value}%`; brakeLabel.textContent=`${brakeEl.value}%`; holdLabel.textContent=holdTargetEl.value; boreLabel.textContent=`${boreEl.value} mm`; strokeLabel.textContent=`${strokeEl.value} mm`; unitLabel.textContent=unitsEl.value; redlineLabel.textContent=`${redlineEl.value} rpm`; maxBoostLabel.textContent=`${Number(maxBoostEl.value).toFixed(1)} psi`; accelRateLabel.textContent=`${Number(accelRateEl.value).toFixed(1)}x`; nosAmountLabel.textContent=`${nosAmountEl.value}%`;
         const gear=Number(gearSelectEl.value), mph=speedMps*2.23694;
         rpmStat.textContent=`RPM: ${Math.round(rpm)}`; boostStat.textContent=`Boost: ${boostPsi.toFixed(1)} psi`; hpStat.textContent=`Power: ${Math.round(hp)} hp`; tqStat.textContent=`Torque: ${Math.round(tq)} Nm`;
